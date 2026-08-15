@@ -55,6 +55,8 @@ export const ClientAuthModal: React.FC<ClientAuthModalProps> = ({ onClose, onLog
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [activeOtpCode, setActiveOtpCode] = useState<string | null>(null);
   const [targetDisplay, setTargetDisplay] = useState<string>('');
+  const [deliveryProvider, setDeliveryProvider] = useState<string>('');
+  const [serverChatUrl, setServerChatUrl] = useState<string>('');
   const [resendTimer, setResendTimer] = useState<number>(60);
   const [canResend, setCanResend] = useState<boolean>(false);
 
@@ -200,11 +202,19 @@ export const ClientAuthModal: React.FC<ClientAuthModalProps> = ({ onClose, onLog
 
       if (data.success) {
         setActiveOtpCode(data.otpCode || '849201');
+        if (data.provider) setDeliveryProvider(data.provider);
+        if (data.directChatUrl) setServerChatUrl(data.directChatUrl);
         setStep('otp');
         setResendTimer(60);
         setCanResend(false);
         setOtpDigits(['', '', '', '', '', '']);
-        setSuccessMessage(`হোয়াটসঅ্যাপে ৬ ডিজিটের ওটিপি ভেরিফিকেশন কোড পাঠানো হয়েছে!`);
+        const providerName =
+          data.provider === 'twilio'
+            ? 'Twilio WhatsApp API'
+            : data.provider === 'whatsapp_cloud_api'
+            ? 'Meta WhatsApp Cloud API'
+            : 'WhatsApp Gateway';
+        setSuccessMessage(`হোয়াটসঅ্যাপে (${providerName}) ৬ ডিজিটের ওটিপি ভেরিফিকেশন কোড পাঠানো হয়েছে!`);
         setTimeout(() => inputRefs.current[0]?.focus(), 200);
       } else {
         setError(data.message || 'ওটিপি পাঠাতে সমস্যা হয়েছে।');
@@ -672,14 +682,14 @@ export const ClientAuthModal: React.FC<ClientAuthModalProps> = ({ onClose, onLog
               )}
 
               <a
-                href={whatsappChatUrl}
+                href={serverChatUrl || whatsappChatUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-2 rounded-xl bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600/30 to-teal-600/30 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
               >
-                <MessageSquare className="h-3.5 w-3.5 text-emerald-400" />
-                <span>হোয়াটসঅ্যাপ মেসেজ খুলুন</span>
-                <ExternalLink className="h-3 w-3" />
+                <MessageSquare className="h-4 w-4 text-emerald-400" />
+                <span>হোয়াটসঅ্যাপ ওটিপি মেসেজ খুলুন</span>
+                <ExternalLink className="h-3.5 w-3.5" />
               </a>
 
               <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>

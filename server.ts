@@ -5,6 +5,8 @@ import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import multer from 'multer';
+import { db, initDatabase, saveDatabase } from './src/server/db';
+import { sendWhatsAppOtp, formatE164Phone } from './src/server/whatsappService';
 import {
   INITIAL_SERVICES,
 } from './src/data/servicesData';
@@ -317,74 +319,109 @@ async function startServer() {
     res.json({ success: true, settings: siteSettingsStore });
   });
 
+  // WhatsApp Gateway Status Endpoint
+  app.get('/api/whatsapp/status', (_req: Request, res: Response) => {
+    res.json({
+      twilioConfigured: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
+      cloudApiConfigured: Boolean(process.env.WHATSAPP_CLOUD_API_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
+      twilioNumber: process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886',
+      adminWhatsApp: siteSettingsStore.whatsappNumber || '01890193985',
+    });
+  });
+
   // User Auth & Accounts System with WhatsApp OTP & Password Verification
-  app.post('/api/user/send-otp', (req: Request, res: Response) => {
-    const { target, type = 'phone', mode = 'login', name = '', email = '', password = '', countryCode = '+880' } = req.body;
-    const cleanTarget = (target || '').trim();
+  app.post('/api/user/send-otp', async (req: Request, res: Response) => {
+    try {
+      const { target, type = 'phone', mode = 'login', name = '', email = '', password = '', countryCode = '+880' } = req.body;
+      const cleanTarget = (target || '').trim();
 
-    if (!cleanTarget) {
-      return res.status(400).json({
-        success: false,
-        message: type === 'email' ? 'অনুগ্রহ করে সঠিক ইমেইল ঠিকানা প্রদান করুন।' : 'অনুগ্রহ করে সঠিক হোয়াটসঅ্যাপ নম্বর প্রদান করুন।',
-      });
-    }
-
-    // In Login mode, if password provided, verify credentials first
-    if (mode === 'login' && password) {
-      const isEmail = cleanTarget.includes('@');
-      const cleanPhoneDigits = cleanTarget.replace(/[^0-9]/g, '');
-      const existingUser = userAccountsStore.find((u) => {
-        if (isEmail) {
-          return u.email?.toLowerCase() === cleanTarget.toLowerCase();
-        } else {
-          const userPhoneDigits = (u.phone || '').replace(/[^0-9]/g, '');
-          return userPhoneDigits.endsWith(cleanPhoneDigits.slice(-8)) || userPhoneDigits === cleanPhoneDigits;
-        }
-      });
-
-      if (existingUser && existingUser.password && existingUser.password !== password) {
+      if (!cleanTarget) {
         return res.status(400).json({
           success: false,
-          message: 'ভুল পাসওয়ার্ড! অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন।',
+          message: type === 'email' ? 'অনুগ্রহ করে সঠিক ইমেইল ঠিকানা প্রদান করুন।' : 'অনুগ্রহ করে সঠিক হোয়াটসঅ্যাপ নম্বর প্রদান করুন।',
         });
       }
-    }
 
-    // Generate secure 6-digit numeric OTP code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
+      // In Login mode, if password provided, verify credentials first
+      if (mode === 'login' && password) {
+        const isEmail = cleanTarget.includes('@');
+        const cleanPhoneDigits = cleanTarget.replace(/[^0-9]/g, '');
+        const existingUser = db.findUserByPhoneOrEmail(cleanTarget) || userAccountsStore.find((u) => {
+          if (isEmail) {
+            return u.email?.toLowerCase() === cleanTarget.toLowerCase();
+          } else {
+            const userPhoneDigits = (u.phone || '').replace(/[^0-9]/g, '');
+            return userPhoneDigits.endsWith(cleanPhoneDigits.slice(-8)) || userPhoneDigits === cleanPhoneDigits;
+          }
+        });
 
-    const normalizedKey = cleanTarget.toLowerCase();
-    otpStore.set(normalizedKey, {
-      target: cleanTarget,
-      code,
-      expiresAt,
-      name: name.trim() || undefined,
-    });
+        if (existingUser && existingUser.password && existingUser.password !== password) {
+          return res.status(400).json({
+            success: false,
+            message: 'ভুল পাসওয়ার্ড! অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন।',
+          });
+        }
+      }
 
-    // Store staged registration data if in registration mode
-    if (mode === 'register') {
+      // Generate secure 6-digit numeric OTP code
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
+
+      // Standardize Phone format with Country Code
+      const formattedTarget = type === 'phone' ? formatE164Phone(cleanTarget, countryCode) : cleanTarget;
+
+      // Dispatch WhatsApp message via Twilio / Meta Cloud API / Direct Gateway
+      const waResult = await sendWhatsAppOtp(formattedTarget, code, name || '', countryCode);
+
+      const normalizedKey = cleanTarget.toLowerCase();
       const isEmail = cleanTarget.includes('@');
       const cleanPhone = !isEmail ? (cleanTarget.startsWith('+') ? cleanTarget : `${countryCode}${cleanTarget.replace(/^0+/, '')}`) : '';
-      const stagedUser = {
+
+      const stagedUser = mode === 'register' ? {
         name: name.trim(),
         email: email.trim() || (isEmail ? cleanTarget : ''),
         phone: cleanPhone || cleanTarget,
         password: password || '',
-      };
-      (otpStore.get(normalizedKey) as any).stagedUser = stagedUser;
+      } : undefined;
+
+      otpStore.set(normalizedKey, {
+        target: cleanTarget,
+        code,
+        expiresAt,
+        name: name.trim() || undefined,
+      });
+
+      if (stagedUser) {
+        (otpStore.get(normalizedKey) as any).stagedUser = stagedUser;
+      }
+
+      // Sync to persistent DB
+      db.saveOtp({
+        target: cleanTarget.toLowerCase(),
+        code,
+        expiresAt,
+        name: name.trim() || undefined,
+        stagedUser,
+        deliveryMethod: waResult.provider,
+      });
+
+      console.log(`[WHATSAPP AUTH OTP DISPATCH] Target: ${formattedTarget} | Code: ${code} | Mode: ${mode} | Provider: ${waResult.provider}`);
+
+      res.json({
+        success: true,
+        message: `হোয়াটসঅ্যাপ নম্বর ${formattedTarget}-এ ৬ ডিজিটের ওটিপি ভেরিফিকেশন কোড পাঠানো হয়েছে!`,
+        otpCode: code, // returned for display & WhatsApp bot integration
+        target: cleanTarget,
+        formattedPhone: formattedTarget,
+        type,
+        expiresAt,
+        provider: waResult.provider,
+        directChatUrl: waResult.directChatUrl,
+      });
+    } catch (err: any) {
+      console.error('Send OTP Handler Error:', err);
+      res.status(500).json({ success: false, message: 'ওটিপি পাঠাতে সমস্যা হয়েছে।' });
     }
-
-    console.log(`[WHATSAPP AUTH OTP DISPATCH] Target: ${cleanTarget} | Code: ${code} | Mode: ${mode} | WhatsApp: YES`);
-
-    res.json({
-      success: true,
-      message: `হোয়াটসঅ্যাপ নম্বর ${cleanTarget}-এ ৬ ডিজিটের ওটিপি ভেরিফিকেশন কোড পাঠানো হয়েছে!`,
-      otpCode: code, // returned for display & WhatsApp bot integration
-      target: cleanTarget,
-      type,
-      expiresAt,
-    });
   });
 
   app.post('/api/user/verify-otp', (req: Request, res: Response) => {
@@ -397,7 +434,7 @@ async function startServer() {
     }
 
     const normalizedKey = cleanTarget.toLowerCase();
-    const stored = otpStore.get(normalizedKey);
+    const stored = otpStore.get(normalizedKey) || db.getOtp(cleanTarget);
 
     // Verify OTP code (or accept demo backup code)
     const isValid = (stored && stored.code === cleanOtp && Date.now() <= stored.expiresAt) || cleanOtp === '123456';
@@ -412,12 +449,13 @@ async function startServer() {
     const stagedData = (stored as any)?.stagedUser;
     // Clean up used OTP
     otpStore.delete(normalizedKey);
+    db.deleteOtp(cleanTarget);
 
     const isEmail = cleanTarget.includes('@');
     const cleanDigits = cleanTarget.replace(/[^0-9]/g, '');
 
     // Find existing account by phone or email
-    let user = userAccountsStore.find((u) =>
+    let user = db.findUserByPhoneOrEmail(cleanTarget) || userAccountsStore.find((u) =>
       isEmail
         ? u.email?.toLowerCase() === cleanTarget.toLowerCase()
         : (u.phone || '').replace(/[^0-9]/g, '').endsWith(cleanDigits.slice(-8)) ||
@@ -440,6 +478,7 @@ async function startServer() {
         registeredAt: new Date().toISOString(),
       };
       userAccountsStore.push(user);
+      db.addUser(user);
     } else {
       if (finalName && (!user.name || user.name.startsWith('Client '))) {
         user.name = finalName;
@@ -453,6 +492,7 @@ async function startServer() {
       if (finalPassword && !user.password) {
         user.password = finalPassword;
       }
+      saveDatabase();
     }
 
     const { password: _, ...userWithoutPassword } = user;

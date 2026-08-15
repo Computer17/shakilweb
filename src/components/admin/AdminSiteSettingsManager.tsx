@@ -48,7 +48,14 @@ export const AdminSiteSettingsManager: React.FC<AdminSiteSettingsManagerProps> =
   onUpdateServices,
   onUpdatePortfolio,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'contacts' | 'services' | 'portfolio' | 'files'>('contacts');
+  const [activeSubTab, setActiveSubTab] = useState<'contacts' | 'whatsapp_gateway' | 'services' | 'portfolio' | 'files'>('contacts');
+
+  // WhatsApp Gateway Tester State
+  const [gatewayStatus, setGatewayStatus] = useState<any>(null);
+  const [testPhone, setTestPhone] = useState('01890193985');
+  const [testName, setTestName] = useState('Shakil Admin');
+  const [testOtpLoading, setTestOtpLoading] = useState(false);
+  const [testOtpResult, setTestOtpResult] = useState<any>(null);
 
   // Contact & Site Settings State
   const [formSettings, setFormSettings] = useState<SiteSettings>(settings);
@@ -92,11 +99,55 @@ export const AdminSiteSettingsManager: React.FC<AdminSiteSettingsManagerProps> =
     }
   };
 
+  const fetchGatewayStatus = async () => {
+    try {
+      const res = await fetch('/api/whatsapp/status');
+      if (res.ok) {
+        const data = await res.json();
+        setGatewayStatus(data);
+      }
+    } catch (err) {
+      console.error('Error fetching WhatsApp status:', err);
+    }
+  };
+
   useEffect(() => {
     if (activeSubTab === 'files') {
       fetchFilesList();
+    } else if (activeSubTab === 'whatsapp_gateway') {
+      fetchGatewayStatus();
     }
   }, [activeSubTab]);
+
+  const handleSendTestWhatsAppOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testPhone.trim()) return;
+
+    setTestOtpLoading(true);
+    setTestOtpResult(null);
+
+    try {
+      const res = await fetch('/api/user/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target: testPhone.trim(),
+          name: testName.trim(),
+          mode: 'login',
+          countryCode: '+880',
+        }),
+      });
+      const data = await res.json();
+      setTestOtpResult(data);
+    } catch (err: any) {
+      setTestOtpResult({
+        success: false,
+        message: err.message || 'Failed to dispatch test OTP',
+      });
+    } finally {
+      setTestOtpLoading(false);
+    }
+  };
 
   const handleDeleteFile = async (file: any) => {
     const filename = file.filename || file.id;
@@ -272,6 +323,22 @@ export const AdminSiteSettingsManager: React.FC<AdminSiteSettingsManagerProps> =
         >
           <Globe className="h-4 w-4" />
           <span>Website & Contacts CMS</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveSubTab('whatsapp_gateway');
+            fetchGatewayStatus();
+          }}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            activeSubTab === 'whatsapp_gateway'
+              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          <MessageSquare className="h-4 w-4 text-emerald-400" />
+          <span>WhatsApp OTP & Vercel API</span>
         </button>
 
         <button
@@ -526,6 +593,205 @@ export const AdminSiteSettingsManager: React.FC<AdminSiteSettingsManagerProps> =
             </div>
           </div>
         </form>
+      )}
+
+      {/* TAB: WHATSAPP OTP GATEWAY & VERCEL DEPLOYMENT CONFIG */}
+      {activeSubTab === 'whatsapp_gateway' && (
+        <div className="space-y-6">
+          {/* Status Header Banner */}
+          <div className="rounded-3xl border border-emerald-500/30 bg-slate-900/90 p-6 space-y-6 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none"></div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <MessageSquare className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
+                    <span>WhatsApp OTP Gateway & Vercel API Hub</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
+                      v2.4 Active
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Twilio WhatsApp Business API & Meta WhatsApp Cloud API integration with Vercel deployment support.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={fetchGatewayStatus}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border border-slate-700 shrink-0"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Refresh Status</span>
+              </button>
+            </div>
+
+            {/* Provider Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Twilio Status */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-slate-300">1. Twilio WhatsApp API</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                    gatewayStatus?.twilioConfigured
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    {gatewayStatus?.twilioConfigured ? '✓ Active Connected' : 'Auto Sandbox Mode'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Sends automated SMS/WhatsApp OTP from registered Twilio sender: <code className="text-cyan-400 font-mono">{gatewayStatus?.twilioNumber || 'whatsapp:+14155238886'}</code>
+                </p>
+              </div>
+
+              {/* Meta Cloud API Status */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-slate-300">2. Meta Cloud API</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                    gatewayStatus?.cloudApiConfigured
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}>
+                    {gatewayStatus?.cloudApiConfigured ? '✓ Configured' : 'Optional (Env)'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Direct Meta Graph API v19+ token & phone number ID for WhatsApp Business Cloud API.
+                </p>
+              </div>
+
+              {/* WhatsApp Interactive Link */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-slate-300">3. Direct wa.me Gateway</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                    ✓ Always Ready (100%)
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Instant deep links & 1-click verification link with Shakil Official WhatsApp (<code className="text-emerald-400 font-mono">01890193985</code>).
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Test Live OTP Sender */}
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 space-y-4">
+            <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+              <Send className="h-4 w-4 text-cyan-400" />
+              <span>Live Test WhatsApp OTP Dispatcher</span>
+            </h3>
+            <p className="text-xs text-slate-400">
+              Enter any WhatsApp phone number below to test the live OTP generation, Twilio/Meta integration, and deep-link generation.
+            </p>
+
+            <form onSubmit={handleSendTestWhatsAppOtp} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 block mb-1">Target Phone Number</label>
+                <input
+                  type="text"
+                  value={testPhone}
+                  onChange={(e) => setTestPhone(e.target.value)}
+                  placeholder="01890193985 or +8801890193985"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 block mb-1">Recipient Name</label>
+                <input
+                  type="text"
+                  value={testName}
+                  onChange={(e) => setTestName(e.target.value)}
+                  placeholder="Shakil Test"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  disabled={testOtpLoading}
+                  className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-emerald-500/20 disabled:opacity-50"
+                >
+                  {testOtpLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  <span>Dispatch Test WhatsApp OTP</span>
+                </button>
+              </div>
+            </form>
+
+            {testOtpResult && (
+              <div className="mt-3 p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Test OTP Dispatched: <strong>{testOtpResult.otpCode}</strong></span>
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-mono">Provider: {testOtpResult.provider}</span>
+                </div>
+                <p className="text-xs text-slate-300">{testOtpResult.message}</p>
+                {testOtpResult.directChatUrl && (
+                  <a
+                    href={testOtpResult.directChatUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:underline font-bold"
+                  >
+                    <span>Open Pre-filled WhatsApp Message</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Vercel Deployment & Database Documentation */}
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 space-y-4">
+            <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+              <Globe className="h-4 w-4 text-cyan-400" />
+              <span>Vercel.com Hosting & Database Setup Guide</span>
+            </h3>
+
+            <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
+              <p>
+                This project has been fully configured for seamless 1-click deployment on <strong>Vercel (vercel.com)</strong>.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="font-bold text-white flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+                    <span>1. Vercel Configuration Included</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-400">
+                    <li><code className="text-cyan-400">vercel.json</code> auto-routes API and static frontend.</li>
+                    <li><code className="text-cyan-400">api/index.ts</code> handles Express endpoints serverlessly.</li>
+                    <li><code className="text-cyan-400">data/database.json</code> persistent local/serverless database.</li>
+                  </ul>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="font-bold text-white flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-cyan-400"></span>
+                    <span>2. Environment Variables for Vercel</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-400">
+                    <li><code className="text-emerald-400">TWILIO_ACCOUNT_SID</code> (Twilio WhatsApp)</li>
+                    <li><code className="text-emerald-400">TWILIO_AUTH_TOKEN</code> (Twilio Auth Token)</li>
+                    <li><code className="text-emerald-400">TWILIO_WHATSAPP_NUMBER</code> (e.g. whatsapp:+14155238886)</li>
+                    <li><code className="text-cyan-400">GEMINI_API_KEY</code> & <code className="text-cyan-400">ADMIN_PASSWORD</code></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* TAB 2: SERVICES MANAGER */}
