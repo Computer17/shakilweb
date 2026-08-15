@@ -41,6 +41,7 @@ interface NavbarProps {
   clientNotifications?: ClientNotification[];
   onMarkNotificationsRead?: () => void;
   onOpenTrackerWithOrder?: (orderId?: string) => void;
+  onOpenWorkspace?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -55,6 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   clientNotifications = [],
   onMarkNotificationsRead,
   onOpenTrackerWithOrder,
+  onOpenWorkspace,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -370,6 +372,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Track Order</span>
           </button>
 
+          {/* Google Workspace Hub CTA */}
+          {onOpenWorkspace && (
+            <button
+              type="button"
+              onClick={onOpenWorkspace}
+              title="Google Workspace Hub (Drive, Gmail, Google Chat)"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-cyan-500/40 bg-gradient-to-r from-cyan-950/60 to-slate-900 text-xs font-bold text-cyan-200 hover:border-cyan-400 hover:text-white transition-all cursor-pointer shadow-sm"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+              <span className="hidden md:inline">Workspace</span>
+            </button>
+          )}
+
           {/* Dark / Light Toggle */}
           <button
             onClick={onToggleDarkMode}
@@ -475,6 +490,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Package className="h-4 w-4" />
             <span>Track Project Real-Time</span>
           </button>
+          {onOpenWorkspace && (
+            <button
+              onClick={() => {
+                onOpenWorkspace();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full text-left px-3 py-2 text-base font-bold text-cyan-300 bg-slate-900 border border-cyan-500/30 rounded-lg flex items-center gap-2 cursor-pointer"
+            >
+              <Sparkles className="h-4 w-4 text-cyan-400" />
+              <span>Google Workspace (Drive, Gmail, Chat)</span>
+            </button>
+          )}
         </div>
       )}
     </header>

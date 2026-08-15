@@ -17,6 +17,7 @@ import { OrderFlowModal } from './components/public/OrderFlowModal';
 import { ClientOrderTrackerModal } from './components/public/ClientOrderTrackerModal';
 import { ClientAuthModal } from './components/auth/ClientAuthModal';
 import { MandatoryAuthScreen } from './components/auth/MandatoryAuthScreen';
+import { WorkspaceHubModal } from './components/workspace/WorkspaceHubModal';
 
 import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminSidebar } from './components/admin/AdminSidebar';
@@ -218,6 +219,11 @@ export default function App() {
   // Tracker Modal State
   const [trackerModalOpen, setTrackerModalOpen] = useState<boolean>(false);
   const [trackerInitialOrderId, setTrackerInitialOrderId] = useState<string | undefined>(undefined);
+
+  // Google Workspace Hub State
+  const [workspaceModalOpen, setWorkspaceModalOpen] = useState<boolean>(false);
+  const [workspaceInitialTab, setWorkspaceInitialTab] = useState<'drive' | 'gmail' | 'chat'>('drive');
+  const [workspaceOrderContext, setWorkspaceOrderContext] = useState<any>(undefined);
 
   // Data Collections
   const [services, setServices] = useState<ServiceItem[]>(INITIAL_SERVICES);
@@ -552,6 +558,11 @@ export default function App() {
                 onUpdateOrder={handleUpdateOrder}
                 onSendMessage={handleSendMessage}
                 selectedOrderId={selectedAdminOrderId}
+                onOpenWorkspace={(tab, orderContext) => {
+                  setWorkspaceInitialTab(tab);
+                  setWorkspaceOrderContext(orderContext);
+                  setWorkspaceModalOpen(true);
+                }}
               />
             )}
 
@@ -577,6 +588,105 @@ export default function App() {
                   setPortfolio(newPortfolio);
                 }}
               />
+            )}
+
+            {adminTab === 'workspace' && (
+              <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 sm:p-8 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                  <div>
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-cyan-400" />
+                      <span>Google Workspace Command Center</span>
+                    </h2>
+                    <p className="text-xs text-slate-400">
+                      Manage Google Drive deliverables, Gmail customer inquiries, and Google Chat spaces directly.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkspaceInitialTab('drive');
+                      setWorkspaceOrderContext(undefined);
+                      setWorkspaceModalOpen(true);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs shadow-md shadow-cyan-500/20 cursor-pointer flex items-center gap-1.5 shrink-0"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    <span>Launch Workspace Hub</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div
+                    onClick={() => {
+                      setWorkspaceInitialTab('drive');
+                      setWorkspaceModalOpen(true);
+                    }}
+                    className="p-5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-cyan-500/50 transition-all cursor-pointer space-y-2 group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="h-10 w-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center font-bold">
+                        📁
+                      </div>
+                      <span className="text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full">
+                        Cloud Files
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-bold text-white group-hover:text-cyan-400 transition-colors">
+                      Google Drive
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Upload project deliverables, browse client files, and generate shared Drive links.
+                    </p>
+                  </div>
+
+                  <div
+                    onClick={() => {
+                      setWorkspaceInitialTab('gmail');
+                      setWorkspaceModalOpen(true);
+                    }}
+                    className="p-5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-red-500/50 transition-all cursor-pointer space-y-2 group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="h-10 w-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center font-bold">
+                        ✉️
+                      </div>
+                      <span className="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
+                        Email OS
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">
+                      Gmail Client
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Review client emails, send official project updates, and dispatch milestone notices with 1-click confirmation.
+                    </p>
+                  </div>
+
+                  <div
+                    onClick={() => {
+                      setWorkspaceInitialTab('chat');
+                      setWorkspaceModalOpen(true);
+                    }}
+                    className="p-5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-emerald-500/50 transition-all cursor-pointer space-y-2 group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold">
+                        💬
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                        Team Spaces
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
+                      Google Chat
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Post milestone alerts and automated task updates directly into your Google Chat spaces.
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
 
             {adminTab === 'analytics' && (
@@ -654,6 +764,11 @@ export default function App() {
             onOpenTrackerWithOrder={(orderId) => {
               setTrackerInitialOrderId(orderId);
               setTrackerModalOpen(true);
+            }}
+            onOpenWorkspace={() => {
+              setWorkspaceInitialTab('drive');
+              setWorkspaceOrderContext(undefined);
+              setWorkspaceModalOpen(true);
             }}
           />
 
@@ -748,6 +863,19 @@ export default function App() {
                 setCurrentUser(user);
                 localStorage.setItem('shakil_user_account', JSON.stringify(user));
               }}
+            />
+          )}
+
+          {/* Google Workspace Hub Modal (Drive, Gmail, Google Chat) */}
+          {workspaceModalOpen && (
+            <WorkspaceHubModal
+              isOpen={workspaceModalOpen}
+              onClose={() => {
+                setWorkspaceModalOpen(false);
+                setWorkspaceOrderContext(undefined);
+              }}
+              initialTab={workspaceInitialTab}
+              orderContext={workspaceOrderContext}
             />
           )}
         </div>

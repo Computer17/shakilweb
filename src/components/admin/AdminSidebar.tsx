@@ -39,6 +39,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'client-hunter', label: 'Global Client Hunter', icon: <Radar className="h-4 w-4" /> },
     { id: 'web-apps', label: 'Private Web Apps', icon: <Globe className="h-4 w-4" /> },
     { id: 'portfolio-mgr', label: 'Portfolio Items', icon: <Briefcase className="h-4 w-4" /> },
+    { id: 'workspace', label: 'Google Workspace', icon: <Globe className="h-4 w-4 text-cyan-400" /> },
     { id: 'site-cms', label: 'Site & Contact CMS', icon: <Globe className="h-4 w-4 text-cyan-400" /> },
     { id: 'services-mgr', label: 'Services Config', icon: <Layers className="h-4 w-4" /> },
     { id: 'files', label: 'Files Manager', icon: <FolderOpen className="h-4 w-4" /> },

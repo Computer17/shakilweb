@@ -36,6 +36,8 @@ import {
   CheckCheck,
   FileDown,
   SlidersHorizontal,
+  Mail,
+  FolderOpen,
 } from 'lucide-react';
 
 interface QuickReplyTemplate {
@@ -140,6 +142,7 @@ interface AdminOrdersManagerProps {
   ) => void;
   onSendMessage: (orderId: string, text: string) => void;
   selectedOrderId?: string;
+  onOpenWorkspace?: (tab: 'drive' | 'gmail' | 'chat', orderContext?: any) => void;
 }
 
 export const AdminOrdersManager: React.FC<AdminOrdersManagerProps> = ({
@@ -147,6 +150,7 @@ export const AdminOrdersManager: React.FC<AdminOrdersManagerProps> = ({
   onUpdateOrder,
   onSendMessage,
   selectedOrderId,
+  onOpenWorkspace,
 }) => {
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPriority, setFilterPriority] = useState<string>('ALL');
@@ -1001,6 +1005,40 @@ export const AdminOrdersManager: React.FC<AdminOrdersManagerProps> = ({
                   <Download className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Export Order</span>
                 </button>
+                {onOpenWorkspace && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onOpenWorkspace('gmail', {
+                        orderId: activeOrder.id,
+                        serviceTitle: activeOrder.serviceTitle,
+                        clientName: activeOrder.clientName,
+                      })
+                    }
+                    className="px-2.5 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Send Gmail update to client"
+                  >
+                    <Mail className="h-3.5 w-3.5 text-red-400" />
+                    <span>Gmail Client</span>
+                  </button>
+                )}
+                {onOpenWorkspace && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onOpenWorkspace('drive', {
+                        orderId: activeOrder.id,
+                        serviceTitle: activeOrder.serviceTitle,
+                        clientName: activeOrder.clientName,
+                      })
+                    }
+                    className="px-2.5 py-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Upload deliverable or receipt to Google Drive"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5 text-cyan-400" />
+                    <span>Save to Drive</span>
+                  </button>
+                )}
                 <button
                   onClick={() => handleStatusChange('ADMIN_REVIEW')}
                   className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs hover:bg-amber-500/30 cursor-pointer"

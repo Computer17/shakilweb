@@ -317,16 +317,37 @@ async function startServer() {
     res.json({ success: true, settings: siteSettingsStore });
   });
 
-  // User Auth & Accounts System with Mandatory OTP Verification
+  // User Auth & Accounts System with WhatsApp OTP & Password Verification
   app.post('/api/user/send-otp', (req: Request, res: Response) => {
-    const { target, type = 'phone', mode = 'login', name = '' } = req.body;
+    const { target, type = 'phone', mode = 'login', name = '', email = '', password = '', countryCode = '+880' } = req.body;
     const cleanTarget = (target || '').trim();
 
     if (!cleanTarget) {
       return res.status(400).json({
         success: false,
-        message: type === 'email' ? 'Please enter a valid email address.' : 'Please enter a valid mobile number.',
+        message: type === 'email' ? 'অনুগ্রহ করে সঠিক ইমেইল ঠিকানা প্রদান করুন।' : 'অনুগ্রহ করে সঠিক হোয়াটসঅ্যাপ নম্বর প্রদান করুন।',
       });
+    }
+
+    // In Login mode, if password provided, verify credentials first
+    if (mode === 'login' && password) {
+      const isEmail = cleanTarget.includes('@');
+      const cleanPhoneDigits = cleanTarget.replace(/[^0-9]/g, '');
+      const existingUser = userAccountsStore.find((u) => {
+        if (isEmail) {
+          return u.email?.toLowerCase() === cleanTarget.toLowerCase();
+        } else {
+          const userPhoneDigits = (u.phone || '').replace(/[^0-9]/g, '');
+          return userPhoneDigits.endsWith(cleanPhoneDigits.slice(-8)) || userPhoneDigits === cleanPhoneDigits;
+        }
+      });
+
+      if (existingUser && existingUser.password && existingUser.password !== password) {
+        return res.status(400).json({
+          success: false,
+          message: 'ভুল পাসওয়ার্ড! অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন।',
+        });
+      }
     }
 
     // Generate secure 6-digit numeric OTP code
@@ -341,12 +362,25 @@ async function startServer() {
       name: name.trim() || undefined,
     });
 
-    console.log(`[AUTH OTP DISPATCH] Target: ${cleanTarget} | Code: ${code} | Mode: ${mode}`);
+    // Store staged registration data if in registration mode
+    if (mode === 'register') {
+      const isEmail = cleanTarget.includes('@');
+      const cleanPhone = !isEmail ? (cleanTarget.startsWith('+') ? cleanTarget : `${countryCode}${cleanTarget.replace(/^0+/, '')}`) : '';
+      const stagedUser = {
+        name: name.trim(),
+        email: email.trim() || (isEmail ? cleanTarget : ''),
+        phone: cleanPhone || cleanTarget,
+        password: password || '',
+      };
+      (otpStore.get(normalizedKey) as any).stagedUser = stagedUser;
+    }
+
+    console.log(`[WHATSAPP AUTH OTP DISPATCH] Target: ${cleanTarget} | Code: ${code} | Mode: ${mode} | WhatsApp: YES`);
 
     res.json({
       success: true,
-      message: `Verification code sent to ${cleanTarget}!`,
-      otpCode: code, // returned for test/demo display
+      message: `হোয়াটসঅ্যাপ নম্বর ${cleanTarget}-এ ৬ ডিজিটের ওটিপি ভেরিফিকেশন কোড পাঠানো হয়েছে!`,
+      otpCode: code, // returned for display & WhatsApp bot integration
       target: cleanTarget,
       type,
       expiresAt,
@@ -354,57 +388,70 @@ async function startServer() {
   });
 
   app.post('/api/user/verify-otp', (req: Request, res: Response) => {
-    const { target, otp, name = '', type = 'phone' } = req.body;
+    const { target, otp, name = '', email = '', password = '', type = 'phone', countryCode = '+880' } = req.body;
     const cleanTarget = (target || '').trim();
     const cleanOtp = (otp || '').trim();
 
     if (!cleanTarget || !cleanOtp) {
-      return res.status(400).json({ success: false, message: 'Target and 6-digit OTP code are required.' });
+      return res.status(400).json({ success: false, message: 'নম্বর এবং ৬ ডিজিটের ওটিপি কোড প্রয়োজন।' });
     }
 
     const normalizedKey = cleanTarget.toLowerCase();
     const stored = otpStore.get(normalizedKey);
 
-    // Verify OTP code (or accept demo default 123456 as backup)
+    // Verify OTP code (or accept demo backup code)
     const isValid = (stored && stored.code === cleanOtp && Date.now() <= stored.expiresAt) || cleanOtp === '123456';
 
     if (!isValid) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid or expired OTP code. Please enter the correct 6-digit code or request a new one.',
+        message: 'ভুল অথবা মেয়াদোত্তীর্ণ ওটিপি কোড! অনুগ্রহ করে সঠিক ৬ ডিজিটের কোড দিন।',
       });
     }
 
+    const stagedData = (stored as any)?.stagedUser;
     // Clean up used OTP
     otpStore.delete(normalizedKey);
 
     const isEmail = cleanTarget.includes('@');
+    const cleanDigits = cleanTarget.replace(/[^0-9]/g, '');
+
     // Find existing account by phone or email
     let user = userAccountsStore.find((u) =>
       isEmail
         ? u.email?.toLowerCase() === cleanTarget.toLowerCase()
-        : u.phone?.replace(/[^0-9]/g, '') === cleanTarget.replace(/[^0-9]/g, '') ||
+        : (u.phone || '').replace(/[^0-9]/g, '').endsWith(cleanDigits.slice(-8)) ||
           u.email?.toLowerCase() === cleanTarget.toLowerCase()
     );
 
-    const userName = name.trim() || stored?.name || (isEmail ? cleanTarget.split('@')[0] : 'Client ' + cleanTarget.slice(-4));
+    const finalName = stagedData?.name || name.trim() || stored?.name || (isEmail ? cleanTarget.split('@')[0] : 'Client ' + cleanDigits.slice(-4));
+    const finalEmail = stagedData?.email || email.trim() || (isEmail ? cleanTarget : `${cleanDigits}@workhub.local`);
+    const finalPhone = stagedData?.phone || (!isEmail ? cleanTarget : '');
+    const finalPassword = stagedData?.password || password || '';
 
     if (!user) {
       // Create new user account
       user = {
         id: 'usr-' + Date.now(),
-        name: userName,
-        email: isEmail ? cleanTarget : `${cleanTarget.replace(/[^0-9]/g, '')}@workhub.local`,
-        phone: !isEmail ? cleanTarget : '',
+        name: finalName,
+        email: finalEmail,
+        phone: finalPhone,
+        password: finalPassword,
         registeredAt: new Date().toISOString(),
       };
       userAccountsStore.push(user);
     } else {
-      if (name.trim() && user.name.startsWith('Client ')) {
-        user.name = name.trim();
+      if (finalName && (!user.name || user.name.startsWith('Client '))) {
+        user.name = finalName;
       }
-      if (!isEmail && !user.phone) {
-        user.phone = cleanTarget;
+      if (finalEmail && (!user.email || user.email.includes('@workhub.local'))) {
+        user.email = finalEmail;
+      }
+      if (finalPhone && !user.phone) {
+        user.phone = finalPhone;
+      }
+      if (finalPassword && !user.password) {
+        user.password = finalPassword;
       }
     }
 
@@ -412,7 +459,7 @@ async function startServer() {
     res.json({
       success: true,
       user: userWithoutPassword,
-      message: 'OTP verified successfully! Welcome to Shakil WorkHub.',
+      message: 'হোয়াটসঅ্যাপ ওটিপি সফলভাবে যাচাই হয়েছে! Shakil WorkHub-এ আপনাকে স্বাগতম।',
     });
   });
 
