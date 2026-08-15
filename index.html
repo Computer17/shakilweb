@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <title>Shakil WorkHub | Reliable Digital Services, Done With Care</title>
+    <meta name="description" content="Affordable and practical digital services including typing, translation, data entry, PDF/Word/Excel work, web research, image editing, website fixes, automation and product listing." />
+    
+    <!-- Open Graph & Social -->
+    <meta property="og:title" content="Shakil WorkHub - Premium Personal Portfolio & Freelance Services" />
+    <meta property="og:description" content="Reliable Digital Services, Done With Care. Computer typing, translation, PDF conversions, data entry, automation and website fixes." />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#0f172a" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  </head>
+  <body class="bg-slate-950 text-slate-100 antialiased selection:bg-cyan-500 selection:text-slate-950">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW reg error:', err));
+        });
+      }
+    </script>
+  </body>
+</html>
+

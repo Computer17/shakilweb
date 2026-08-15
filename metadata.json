@@ -1,0 +1,6 @@
+{
+  "name": "Shakil WorkHub",
+  "description": "Premium Personal Portfolio & Freelance Work OS for Shakil",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
