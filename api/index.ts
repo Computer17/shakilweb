@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { db, initDatabase, saveDatabase } from '../src/server/db';
 import { sendWhatsAppOtp, formatE164Phone } from '../src/server/whatsappService';
+import { sendOrderCompletedEmailTrigger, resolveClientEmail } from '../src/server/emailService';
 import { GoogleGenAI } from '@google/genai';
 
 const app = express();
@@ -229,18 +230,66 @@ app.post('/api/orders', (req: Request, res: Response) => {
 });
 
 app.get('/api/orders/:id', (req: Request, res: Response) => {
-  const order = db.get().orders.find((o) => o.id === req.params.id);
+  const order = db.get().orders.find((o) => o.id === req.params.id || o.id === '#' + req.params.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
   res.json(order);
 });
 
-app.put('/api/orders/:id', (req: Request, res: Response) => {
+const handleServerlessOrderUpdate = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const orders = db.get().orders.map((o) => (o.id === id ? { ...o, ...req.body, updatedAt: new Date().toISOString() } : o));
-  db.set({ orders });
-  const updated = orders.find((o) => o.id === id);
-  res.json({ success: true, order: updated });
-});
+  const currentOrders = db.get().orders;
+  const existingOrder = currentOrders.find((o) => o.id === id || o.id === '#' + id);
+  if (!existingOrder) {
+    return res.status(404).json({ success: false, message: 'Order not found' });
+  }
+
+  const oldStatus = existingOrder.status;
+  const updatedStatus = req.body.status || existingOrder.status;
+  let emailLog: any = null;
+
+  // Automated nodemailer trigger if status changed to 'COMPLETED'
+  if (updatedStatus === 'COMPLETED' || (req.body.status && req.body.status !== oldStatus)) {
+    try {
+      const emailResult = await sendOrderCompletedEmailTrigger({
+        order: { ...existingOrder, ...req.body },
+        oldStatus,
+        newStatus: updatedStatus,
+        adminNotes: req.body.adminNotes,
+      });
+      emailLog = {
+        id: 'elog-' + Date.now(),
+        recipientEmail: emailResult.recipientEmail,
+        subject: emailResult.subject,
+        sentAt: emailResult.sentAt,
+        deliveryStatus: emailResult.deliveryStatus,
+        previewHtml: emailResult.previewHtml,
+      };
+    } catch (e) {
+      console.error('Serverless email trigger error:', e);
+    }
+  }
+
+  const emailLogs = existingOrder.emailLogs ? [...existingOrder.emailLogs] : [];
+  if (emailLog) emailLogs.unshift(emailLog);
+
+  const updatedOrder = {
+    ...existingOrder,
+    ...req.body,
+    emailLogs,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const updatedOrders = currentOrders.map((o) =>
+    o.id === id || o.id === '#' + id ? updatedOrder : o
+  );
+  db.set({ orders: updatedOrders });
+  saveDatabase();
+
+  res.json({ success: true, order: updatedOrder, emailLog });
+};
+
+app.put('/api/orders/:id', handleServerlessOrderUpdate);
+app.patch('/api/orders/:id', handleServerlessOrderUpdate);
 
 app.get('/api/services', (_req: Request, res: Response) => {
   res.json(db.get().services);

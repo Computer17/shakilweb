@@ -8,6 +8,12 @@ import multer from 'multer';
 import { db, initDatabase, saveDatabase } from './src/server/db';
 import { sendWhatsAppOtp, formatE164Phone } from './src/server/whatsappService';
 import {
+  sendOrderCompletedEmailTrigger,
+  resolveClientEmail,
+  generateCompletedOrderEmailHtml,
+  createNodemailerTransporter,
+} from './src/server/emailService';
+import {
   INITIAL_SERVICES,
 } from './src/data/servicesData';
 import {
@@ -83,15 +89,39 @@ let clientsStore = [...INITIAL_CLIENTS];
 let ordersStore: OrderRequest[] = [...INITIAL_ORDERS];
 let jobOpportunitiesStore = [...INITIAL_JOB_OPPORTUNITIES];
 
-// Helper to dispatch automated email notification on order status change
+// Helper to dispatch automated email notification on order status change with nodemailer trigger
 async function dispatchOrderStatusEmailAlert(
   order: OrderRequest,
   oldStatus: string,
   newStatus: string,
   adminNotes?: string
 ): Promise<EmailLog> {
-  const recipient = order.clientEmail || 'client@example.com';
+  const recipient = resolveClientEmail(order);
   const now = new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' });
+
+  // If status is 'COMPLETED', use the rich, comprehensive completion email trigger
+  if (newStatus === 'COMPLETED') {
+    const triggerResult = await sendOrderCompletedEmailTrigger({
+      order,
+      oldStatus,
+      newStatus,
+      adminNotes,
+      customRecipient: recipient,
+    });
+
+    const completedEmailLog: EmailLog = {
+      id: 'elog-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      recipientEmail: triggerResult.recipientEmail,
+      subject: triggerResult.subject,
+      statusChange: { from: oldStatus, to: newStatus },
+      sentAt: triggerResult.sentAt,
+      deliveryStatus: triggerResult.deliveryStatus,
+      previewHtml: triggerResult.previewHtml,
+    };
+
+    return completedEmailLog;
+  }
+
   const subject = `[Shakil WorkHub] Order Alert (${order.id}): Status Changed to ${newStatus.replace(/_/g, ' ')}`;
 
   const htmlBody = `
@@ -172,7 +202,7 @@ async function dispatchOrderStatusEmailAlert(
         <div class="footer">
           Official automated status dispatch from <strong>Shakil WorkHub Order Engine</strong>.<br/>
           To manage email notification settings, toggle preferences in your Client Order Tracker.<br/>
-          Direct Support: WhatsApp (+8801700000000) | Telegram (@shakil_workhub)
+          Direct Support: WhatsApp (+8801890193985) | Telegram (@shakil_workhub)
         </div>
       </div>
     </body>
@@ -181,20 +211,11 @@ async function dispatchOrderStatusEmailAlert(
 
   let deliveryStatus: 'DELIVERED' | 'SENT' | 'SIMULATED' | 'FAILED' = 'SIMULATED';
 
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+  const transporter = createNodemailerTransporter();
+  if (transporter && recipient.includes('@')) {
     try {
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT) || 587,
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
-        },
-      });
-
       await transporter.sendMail({
-        from: `"${process.env.SMTP_FROM_NAME || 'Shakil WorkHub'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
+        from: `"${process.env.SMTP_FROM_NAME || 'Shakil WorkHub'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'm.p.17.lal.2.com@gmail.com'}>`,
         to: recipient,
         subject,
         html: htmlBody,
@@ -788,8 +809,11 @@ async function startServer() {
     let newEmailLog: EmailLog | null = null;
 
     if (status && status !== oldStatus) {
-      // Trigger automated email dispatch if client is subscribed or has email
-      if (o.emailSubscribed || emailSubscribed !== false) {
+      // Trigger automated email dispatch whenever status changes (especially on 'COMPLETED' or if client has email)
+      const shouldSendEmail =
+        updatedStatus === 'COMPLETED' || o.emailSubscribed !== false || Boolean(o.clientEmail);
+
+      if (shouldSendEmail) {
         newEmailLog = await dispatchOrderStatusEmailAlert(
           { ...o, status: updatedStatus },
           oldStatus,
@@ -799,7 +823,7 @@ async function startServer() {
       }
 
       const emailNotice = newEmailLog
-        ? ` 📧 [Automated email dispatched to ${newEmailLog.recipientEmail}]`
+        ? ` 📧 [Automated email dispatched via nodemailer to ${newEmailLog.recipientEmail}]`
         : '';
 
       updatedMessages.push({
@@ -837,6 +861,9 @@ async function startServer() {
     };
 
     ordersStore[orderIndex] = updatedOrder;
+    db.set({ orders: ordersStore as any });
+    saveDatabase();
+
     res.json({ success: true, order: updatedOrder, emailLog: newEmailLog });
   };
 
